@@ -429,15 +429,90 @@ async function onMapClick(e) {
       optimal: optimal
     };
 
-    // Show preview
+    // Show preview, hide compass fallback
     showOrientationPreview(pendingLocation);
+    document.getElementById('compassFallback').classList.add('hidden');
     document.getElementById('mapInstructions').textContent = 'Tap elsewhere to try a different spot';
   } else {
-    // No coastline found
-    document.getElementById('mapInstructions').textContent = result.error || 'No coastline found nearby. Try tapping closer to the water.';
+    // No coastline found - show compass fallback
     document.getElementById('orientationPreview').classList.add('hidden');
-    pendingLocation = null;
+    document.getElementById('compassFallback').classList.remove('hidden');
+    document.getElementById('mapInstructions').textContent = 'Select beach direction below, or tap closer to the water';
+
+    // Store partial pending location for compass selection
+    pendingLocation = {
+      id: `custom-${Date.now()}`,
+      name: null, // Will be filled by reverse geocoding
+      lat: lat,
+      lng: lng,
+      orientation: null, // Will be set by compass
+      confidence: 'manual',
+      optimal: null
+    };
+
+    // Reverse geocode in background
+    reverseGeocode(lat, lng).then(name => {
+      if (pendingLocation && pendingLocation.lat === lat) {
+        pendingLocation.name = name;
+      }
+    });
+
+    // Clear any previous compass selection
+    document.querySelectorAll('.compass-dir').forEach(btn => btn.classList.remove('selected'));
   }
+}
+
+// Reverse geocode helper
+async function reverseGeocode(lat, lng) {
+  let locationName = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  try {
+    const geoResponse = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+    if (geoResponse.ok) {
+      const geoData = await geoResponse.json();
+      const parts = [];
+      if (geoData.address) {
+        if (geoData.address.beach) parts.push(geoData.address.beach);
+        else if (geoData.address.tourism) parts.push(geoData.address.tourism);
+        else if (geoData.address.suburb) parts.push(geoData.address.suburb);
+        else if (geoData.address.town) parts.push(geoData.address.town);
+        else if (geoData.address.city) parts.push(geoData.address.city);
+        else if (geoData.address.village) parts.push(geoData.address.village);
+
+        if (geoData.address.state) parts.push(geoData.address.state);
+        else if (geoData.address.country) parts.push(geoData.address.country);
+      }
+      if (parts.length > 0) {
+        locationName = parts.join(', ');
+      }
+    }
+  } catch (e) {
+    console.warn('Reverse geocoding failed');
+  }
+  return locationName;
+}
+
+// Handle manual compass direction selection
+function selectCompassDir(degrees) {
+  if (!pendingLocation) return;
+
+  // Update UI selection
+  document.querySelectorAll('.compass-dir').forEach(btn => {
+    btn.classList.toggle('selected', parseInt(btn.dataset.dir) === degrees);
+  });
+
+  // Set orientation and calculate optimal directions
+  pendingLocation.orientation = degrees;
+  pendingLocation.optimal = calculateOptimalDirections(degrees);
+
+  // Use coordinates as fallback name if reverse geocode hasn't completed
+  if (!pendingLocation.name) {
+    pendingLocation.name = `${pendingLocation.lat.toFixed(4)}, ${pendingLocation.lng.toFixed(4)}`;
+  }
+
+  // Hide compass, show preview
+  document.getElementById('compassFallback').classList.add('hidden');
+  showOrientationPreview(pendingLocation);
+  document.getElementById('mapInstructions').textContent = 'Tap elsewhere to try a different spot';
 }
 
 function showOrientationPreview(location) {
@@ -487,6 +562,7 @@ async function confirmLocation() {
   // Set as current location and load forecast
   currentLocation = pendingLocation;
   updateLocationName();
+  updateGuideSection();
   closeLocationPicker();
 
   await Promise.all([
@@ -596,6 +672,7 @@ async function selectFavorite(index) {
 
   currentLocation = favorites[index];
   updateLocationName();
+  updateGuideSection();
   closeLocationPicker();
 
   await Promise.all([
@@ -623,6 +700,7 @@ function deleteFavorite(index) {
       currentLocation = DEFAULT_LOCATIONS['sandy-hook'];
     }
     updateLocationName();
+    updateGuideSection();
     loadForecast();
     loadSunTimes();
   }
@@ -672,6 +750,7 @@ function getOptimal() {
 }
 
 let forecastChart = null;
+let isFirstLaunch = false;
 
 document.addEventListener('DOMContentLoaded', init);
 
@@ -681,20 +760,61 @@ async function init() {
   if (favorites.length > 0) {
     currentLocation = favorites[0];
   } else {
+    // First launch - no favorites yet
+    isFirstLaunch = true;
     currentLocation = DEFAULT_LOCATIONS['sandy-hook'];
   }
 
   updateLocationName();
+  updateGuideSection();
+
   await Promise.all([
     loadForecast(),
     loadSunTimes()
   ]);
+
+  // Show location picker on first launch after brief delay
+  if (isFirstLaunch) {
+    setTimeout(() => {
+      openLocationPicker();
+    }, 1000);
+  }
 }
 
 function updateLocationName() {
   const nameEl = document.getElementById('locationName');
   if (nameEl && currentLocation) {
     nameEl.textContent = currentLocation.name;
+  }
+}
+
+function updateGuideSection() {
+  if (!currentLocation) return;
+
+  // Update guide title
+  const titleEl = document.getElementById('guideTitle');
+  if (titleEl) {
+    // Use short name (first part before comma)
+    const shortName = currentLocation.name.split(',')[0];
+    titleEl.textContent = `${shortName} Surf Guide`;
+  }
+
+  // Update optimal swell directions
+  const swellEl = document.getElementById('guideSwell');
+  if (swellEl && currentLocation.optimal) {
+    swellEl.textContent = currentLocation.optimal.swellDirs
+      .slice(0, 3)
+      .map(d => degreesToCardinal(d))
+      .join(', ');
+  }
+
+  // Update optimal wind directions
+  const windEl = document.getElementById('guideWind');
+  if (windEl && currentLocation.optimal) {
+    windEl.textContent = currentLocation.optimal.windDirs
+      .slice(0, 3)
+      .map(d => degreesToCardinal(d))
+      .join(', ') + ' (offshore)';
   }
 }
 

@@ -898,3 +898,62 @@ body {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* Compass Fallback */
+.compass-fallback {
+  margin: 0 16px 16px;
+  padding: 16px;
+  background: var(--bg-card);
+  border-radius: 12px;
+  border: 1px solid var(--accent-orange);
+}
+
+.compass-fallback.hidden {
+  display: none;
+}
+
+.compass-header {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.compass-header span {
+  font-size: 0.85rem;
+  color: var(--accent-orange);
+  font-weight: 600;
+}
+
+.compass-header p {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.compass-wheel {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.compass-dir {
+  padding: 14px 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.compass-dir:hover {
+  background: var(--border-color);
+  border-color: var(--accent-blue);
+}
+
+.compass-dir.selected {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: white;
+}

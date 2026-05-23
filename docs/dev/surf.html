@@ -100,15 +100,15 @@
 
     <!-- Conditions Guide -->
     <section class="guide-section">
-      <h2>Sandy Hook Surf Guide</h2>
+      <h2 id="guideTitle">Surf Guide</h2>
       <div class="guide-content">
         <div class="guide-item">
           <span class="guide-label">Best Swell</span>
-          <span class="guide-value">E, ESE, SE</span>
+          <span id="guideSwell" class="guide-value">--</span>
         </div>
         <div class="guide-item">
           <span class="guide-label">Best Wind</span>
-          <span class="guide-value">W, NW (offshore)</span>
+          <span id="guideWind" class="guide-value">--</span>
         </div>
         <div class="guide-item">
           <span class="guide-label">Ideal Height</span>
@@ -174,6 +174,24 @@
         <button id="confirmLocationBtn" class="confirm-btn" onclick="confirmLocation()">
           Use This Location
         </button>
+      </div>
+
+      <!-- Manual Compass Fallback -->
+      <div id="compassFallback" class="compass-fallback hidden">
+        <div class="compass-header">
+          <span>No coastline detected</span>
+          <p>Which direction does this beach face?</p>
+        </div>
+        <div class="compass-wheel">
+          <button class="compass-dir" data-dir="0" onclick="selectCompassDir(0)">N</button>
+          <button class="compass-dir" data-dir="45" onclick="selectCompassDir(45)">NE</button>
+          <button class="compass-dir" data-dir="90" onclick="selectCompassDir(90)">E</button>
+          <button class="compass-dir" data-dir="135" onclick="selectCompassDir(135)">SE</button>
+          <button class="compass-dir" data-dir="180" onclick="selectCompassDir(180)">S</button>
+          <button class="compass-dir" data-dir="225" onclick="selectCompassDir(225)">SW</button>
+          <button class="compass-dir" data-dir="270" onclick="selectCompassDir(270)">W</button>
+          <button class="compass-dir" data-dir="315" onclick="selectCompassDir(315)">NW</button>
+        </div>
       </div>
 
       <div class="favorites-section">
