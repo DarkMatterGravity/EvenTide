@@ -1,5 +1,268 @@
 // Surf Forecast JavaScript
 
+// ============================================
+// COASTLINE ORIENTATION DETECTION (POC)
+// ============================================
+
+/**
+ * Detect beach orientation from OSM coastline data
+ * @param {number} lat - Latitude
+ * @param {number} lng - Longitude
+ * @returns {Promise<{orientation: number, confidence: string, debug: object}>}
+ * - orientation: degrees (0-360) indicating which way the beach FACES (toward water)
+ * - confidence: 'high', 'medium', 'low'
+ * - debug: raw data for troubleshooting
+ */
+async function detectBeachOrientation(lat, lng) {
+  const SEARCH_RADIUS = 1000; // meters
+
+  // Query Overpass API for coastline geometry
+  const query = `
+    [out:json][timeout:25];
+    (
+      way["natural"="coastline"](around:${SEARCH_RADIUS},${lat},${lng});
+    );
+    out geom;
+  `;
+
+  const url = 'https://overpass-api.de/api/interpreter';
+
+  try {
+    console.log('Fetching coastline data from Overpass API...');
+    const response = await fetch(url, {
+      method: 'POST',
+      body: `data=${encodeURIComponent(query)}`,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Overpass API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Overpass response:', data);
+
+    if (!data.elements || data.elements.length === 0) {
+      return {
+        orientation: null,
+        confidence: 'none',
+        error: 'No coastline found within 1km',
+        debug: { lat, lng, searchRadius: SEARCH_RADIUS }
+      };
+    }
+
+    // Find the closest point on any coastline segment
+    let closestResult = null;
+    let minDistance = Infinity;
+
+    for (const way of data.elements) {
+      if (!way.geometry || way.geometry.length < 2) continue;
+
+      for (let i = 0; i < way.geometry.length - 1; i++) {
+        const p1 = way.geometry[i];
+        const p2 = way.geometry[i + 1];
+
+        const result = closestPointOnSegment(lat, lng, p1.lat, p1.lon, p2.lat, p2.lon);
+
+        if (result.distance < minDistance) {
+          minDistance = result.distance;
+          closestResult = {
+            ...result,
+            p1,
+            p2,
+            wayId: way.id
+          };
+        }
+      }
+    }
+
+    if (!closestResult) {
+      return {
+        orientation: null,
+        confidence: 'none',
+        error: 'Could not find valid coastline segment',
+        debug: { lat, lng, ways: data.elements.length }
+      };
+    }
+
+    // Calculate orientation (perpendicular to coastline segment)
+    // OSM convention: coastlines are drawn with water on the RIGHT side
+    // So we rotate the segment direction 90° clockwise to face the water
+    const segmentBearing = calculateBearing(
+      closestResult.p1.lat, closestResult.p1.lon,
+      closestResult.p2.lat, closestResult.p2.lon
+    );
+
+    // Rotate 90° clockwise (add 90°) to face the water
+    const orientation = (segmentBearing + 90) % 360;
+
+    // Confidence based on distance to coastline
+    let confidence;
+    if (minDistance < 100) confidence = 'high';
+    else if (minDistance < 500) confidence = 'medium';
+    else confidence = 'low';
+
+    return {
+      orientation: Math.round(orientation),
+      confidence,
+      distanceToCoast: Math.round(minDistance),
+      debug: {
+        lat,
+        lng,
+        segmentBearing: Math.round(segmentBearing),
+        closestPoint: closestResult.closest,
+        wayId: closestResult.wayId
+      }
+    };
+
+  } catch (error) {
+    console.error('Beach orientation detection failed:', error);
+    return {
+      orientation: null,
+      confidence: 'none',
+      error: error.message,
+      debug: { lat, lng }
+    };
+  }
+}
+
+/**
+ * Find closest point on a line segment to a given point
+ * Returns distance in meters
+ */
+function closestPointOnSegment(lat, lng, lat1, lon1, lat2, lon2) {
+  // Convert to simple planar coordinates (good enough for small distances)
+  const x = lng, y = lat;
+  const x1 = lon1, y1 = lat1;
+  const x2 = lon2, y2 = lat2;
+
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+
+  if (dx === 0 && dy === 0) {
+    // Segment is a point
+    return {
+      closest: { lat: lat1, lng: lon1 },
+      distance: haversineDistance(lat, lng, lat1, lon1)
+    };
+  }
+
+  // Project point onto line segment
+  let t = ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy);
+  t = Math.max(0, Math.min(1, t)); // Clamp to segment
+
+  const closestLng = x1 + t * dx;
+  const closestLat = y1 + t * dy;
+
+  return {
+    closest: { lat: closestLat, lng: closestLng },
+    distance: haversineDistance(lat, lng, closestLat, closestLng),
+    t
+  };
+}
+
+/**
+ * Calculate bearing from point 1 to point 2 (in degrees)
+ */
+function calculateBearing(lat1, lon1, lat2, lon2) {
+  const toRad = deg => deg * Math.PI / 180;
+  const toDeg = rad => rad * 180 / Math.PI;
+
+  const dLon = toRad(lon2 - lon1);
+  const phi1 = toRad(lat1);
+  const phi2 = toRad(lat2);
+
+  const y = Math.sin(dLon) * Math.cos(phi2);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLon);
+
+  let bearing = toDeg(Math.atan2(y, x));
+  return (bearing + 360) % 360;
+}
+
+/**
+ * Calculate distance between two points using Haversine formula
+ * Returns distance in meters
+ */
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // Earth's radius in meters
+  const toRad = deg => deg * Math.PI / 180;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+}
+
+/**
+ * Calculate optimal swell and wind directions from beach orientation
+ * @param {number} orientation - Beach facing direction in degrees
+ * @returns {object} - { swellDirs: number[], windDirs: number[] }
+ */
+function calculateOptimalDirections(orientation) {
+  // Optimal swell comes FROM the direction the beach faces (± 22.5°)
+  const swellDirs = [
+    orientation,
+    (orientation + 22.5) % 360,
+    (orientation - 22.5 + 360) % 360
+  ];
+
+  // Optimal wind is OFFSHORE - blowing from land toward water
+  // That's the opposite direction (± 45°)
+  const offshore = (orientation + 180) % 360;
+  const windDirs = [
+    offshore,
+    (offshore + 45) % 360,
+    (offshore - 45 + 360) % 360
+  ];
+
+  return { swellDirs, windDirs };
+}
+
+/**
+ * Test function - run from browser console to verify detection works
+ * Usage: testBeachOrientation()
+ */
+async function testBeachOrientation() {
+  const testCases = [
+    { name: 'Sandy Hook, NJ', lat: 40.4667, lng: -74.01, expected: 'E-facing (~90°)' },
+    { name: 'Uluwatu, Bali', lat: -8.83, lng: 115.08, expected: 'S/SW-facing (~180-225°)' },
+    { name: 'Pipeline, Oahu', lat: 21.665, lng: -158.053, expected: 'N-facing (~0°)' },
+    { name: 'Nazaré, Portugal', lat: 39.6021, lng: -9.0698, expected: 'W-facing (~270°)' }
+  ];
+
+  console.log('=== Beach Orientation Detection Test ===\n');
+
+  for (const test of testCases) {
+    console.log(`Testing ${test.name}...`);
+    const result = await detectBeachOrientation(test.lat, test.lng);
+    console.log(`  Expected: ${test.expected}`);
+    console.log(`  Detected: ${result.orientation}° (${degreesToCardinal(result.orientation || 0)}-facing)`);
+    console.log(`  Confidence: ${result.confidence}`);
+    console.log(`  Distance to coast: ${result.distanceToCoast}m`);
+    if (result.orientation) {
+      const optimal = calculateOptimalDirections(result.orientation);
+      console.log(`  Optimal swell from: ${optimal.swellDirs.map(d => degreesToCardinal(d)).join(', ')}`);
+      console.log(`  Optimal wind from: ${optimal.windDirs.map(d => degreesToCardinal(d)).join(', ')}`);
+    }
+    if (result.error) console.log(`  Error: ${result.error}`);
+    console.log('');
+
+    // Rate limit: wait 1 second between requests (Overpass API courtesy)
+    await new Promise(r => setTimeout(r, 1000));
+  }
+
+  console.log('=== Test Complete ===');
+}
+
+// ============================================
+// END COASTLINE ORIENTATION DETECTION
+// ============================================
+
 const LOCATIONS = {
   'sandy-hook': {
     name: 'Sandy Hook, NJ',
