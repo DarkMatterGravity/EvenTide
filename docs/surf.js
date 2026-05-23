@@ -652,10 +652,19 @@ function closeHourlyExpand(event) {
 
 // Get optimal conditions for current location
 function getOptimal() {
-  const loc = LOCATIONS[currentLocation];
+  if (!currentLocation || !currentLocation.optimal) {
+    // Fallback defaults
+    return {
+      swellDirs: [90, 112.5, 67.5],
+      windDirs: [270, 315, 225],
+      minHeight: 3,
+      maxHeight: 6,
+      minPeriod: 8
+    };
+  }
   return {
-    swellDirs: loc.optimal.swellDirs,
-    windDirs: loc.optimal.windDirs,
+    swellDirs: currentLocation.optimal.swellDirs,
+    windDirs: currentLocation.optimal.windDirs,
     minHeight: 3,
     maxHeight: 6,
     minPeriod: 8
@@ -667,12 +676,12 @@ let forecastChart = null;
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
-  // Set up location dropdown
-  const dropdown = document.getElementById('locationSelect');
-  if (dropdown) {
-    dropdown.addEventListener('change', (e) => {
-      switchLocation(e.target.value);
-    });
+  // Load current location from favorites or use default
+  const favorites = loadFavorites();
+  if (favorites.length > 0) {
+    currentLocation = favorites[0];
+  } else {
+    currentLocation = DEFAULT_LOCATIONS['sandy-hook'];
   }
 
   updateLocationName();
@@ -683,31 +692,23 @@ async function init() {
 }
 
 function updateLocationName() {
-  const loc = LOCATIONS[currentLocation];
   const nameEl = document.getElementById('locationName');
-  if (nameEl) nameEl.textContent = loc.name;
+  if (nameEl && currentLocation) {
+    nameEl.textContent = currentLocation.name;
+  }
 }
 
-async function switchLocation(locationId) {
-  if (!LOCATIONS[locationId]) return;
-  currentLocation = locationId;
-
-  // Show loading state
+function showLoadingState() {
   document.getElementById('currentWaveHeight').textContent = '--';
   document.getElementById('currentPeriod').textContent = '--';
   document.getElementById('currentSwellDir').textContent = '--';
   document.getElementById('currentWind').textContent = '--';
-
-  await Promise.all([
-    loadForecast(),
-    loadSunTimes()
-  ]);
 }
 
 async function loadSunTimes() {
-  const loc = LOCATIONS[currentLocation];
+  if (!currentLocation) return;
   try {
-    const url = `https://api.sunrise-sunset.org/json?lat=${loc.lat}&lng=${loc.lng}&formatted=0`;
+    const url = `https://api.sunrise-sunset.org/json?lat=${currentLocation.lat}&lng=${currentLocation.lng}&formatted=0`;
     const response = await fetch(url);
     const data = await response.json();
 
@@ -733,11 +734,12 @@ async function loadSunTimes() {
 }
 
 async function loadForecast() {
-  const loc = LOCATIONS[currentLocation];
-  const tz = encodeURIComponent(loc.timezone);
+  if (!currentLocation) return;
+
+  const tz = encodeURIComponent(currentLocation.timezone || 'America/New_York');
   try {
     // Fetch from Open-Meteo Marine API (free, no key needed)
-    const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${loc.lat}&longitude=${loc.lng}&hourly=wave_height,wave_direction,wave_period,wind_wave_height,swell_wave_height,swell_wave_direction,swell_wave_period&timezone=${tz}&forecast_days=3`;
+    const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${currentLocation.lat}&longitude=${currentLocation.lng}&hourly=wave_height,wave_direction,wave_period,wind_wave_height,swell_wave_height,swell_wave_direction,swell_wave_period&timezone=${tz}&forecast_days=3`;
 
     const response = await fetch(url);
     if (!response.ok) throw new Error('Failed to fetch forecast');
@@ -745,7 +747,7 @@ async function loadForecast() {
     const data = await response.json();
 
     // Also get wind data from Open-Meteo Weather API
-    const windUrl = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lng}&hourly=wind_speed_10m,wind_direction_10m&timezone=${tz}&forecast_days=3&wind_speed_unit=mph`;
+    const windUrl = `https://api.open-meteo.com/v1/forecast?latitude=${currentLocation.lat}&longitude=${currentLocation.lng}&hourly=wind_speed_10m,wind_direction_10m&timezone=${tz}&forecast_days=3&wind_speed_unit=mph`;
 
     const windResponse = await fetch(windUrl);
     const windData = await windResponse.json();
