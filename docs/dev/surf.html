@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0f0f1a">
+  <title>Surf Forecast</title>
+  <link rel="manifest" href="../manifest.json">
+  <link rel="apple-touch-icon" href="../icons/icon-192.png">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="surf.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-row header-top">
+        <a href="../menu.html" class="back-btn">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+          </svg>
+        </a>
+        <h1>FORECAST</h1>
+        <div class="sun-times">
+          <div class="sun-item">
+            <span class="sun-icon">☀️</span>
+            <span id="sunriseTime" class="sun-value">--</span>
+          </div>
+          <div class="sun-item">
+            <span class="sun-icon">🌙</span>
+            <span id="sunsetTime" class="sun-value">--</span>
+          </div>
+        </div>
+      </div>
+      <div class="header-row header-bottom">
+        <button id="locationBtn" class="location-btn" onclick="openLocationPicker()">
+          <span id="locationName">Sandy Hook, NJ</span>
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+            <path d="M7 10l5 5 5-5z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Current Conditions -->
+    <section class="current-section">
+      <div class="current-header">
+        <h2>Current Conditions</h2>
+        <span id="currentRating" class="rating rating-fair">FAIR</span>
+      </div>
+      <div class="wave-visual">
+        <div class="visual-scene">
+          <img src="../SurferStanding.png?v=2" alt="Surfer" class="surfer-img" id="surferImg">
+          <div class="wave-line" id="waveLine"></div>
+        </div>
+        <div class="visual-stats">
+          <div class="stat-primary">
+            <span id="currentWaveHeight" class="stat-value">--</span>
+            <span class="stat-unit">ft</span>
+          </div>
+          <div class="stat-secondary">
+            <span id="currentPeriod" class="stat-period">--</span><span class="stat-label">s</span>
+            <span class="stat-divider">·</span>
+            <span id="currentSwellDir" class="stat-dir">--</span>
+          </div>
+          <div class="stat-wind">
+            <span id="currentWind" class="stat-wind-val">--</span>
+            <span class="stat-label">mph</span>
+            <span id="currentWindDir" class="stat-wind-dir"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Hourly Breakdown (expandable) -->
+    <section class="hourly-section" id="hourlySection" onclick="toggleHourlyExpand(event)">
+      <div class="hourly-header">
+        <h2>Hourly Breakdown</h2>
+        <span class="expand-hint">Tap to expand</span>
+      </div>
+      <button class="close-btn" id="closeBtn" onclick="closeHourlyExpand(event)">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z"/>
+        </svg>
+      </button>
+      <div id="hourlyList" class="hourly-list">
+        <div class="loading">Loading forecast...</div>
+      </div>
+    </section>
+
+    <!-- Hourly Forecast Chart -->
+    <section class="chart-section">
+      <h2>48-Hour Forecast</h2>
+      <div class="chart-container">
+        <canvas id="forecastChart"></canvas>
+      </div>
+    </section>
+
+    <!-- Conditions Guide -->
+    <section class="guide-section">
+      <h2>Sandy Hook Surf Guide</h2>
+      <div class="guide-content">
+        <div class="guide-item">
+          <span class="guide-label">Best Swell</span>
+          <span class="guide-value">E, ESE, SE</span>
+        </div>
+        <div class="guide-item">
+          <span class="guide-label">Best Wind</span>
+          <span class="guide-value">W, NW (offshore)</span>
+        </div>
+        <div class="guide-item">
+          <span class="guide-label">Ideal Height</span>
+          <span class="guide-value">3-6 ft</span>
+        </div>
+        <div class="guide-item">
+          <span class="guide-label">Ideal Period</span>
+          <span class="guide-value">8+ seconds</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Location Picker Modal -->
+  <div id="locationModal" class="location-modal">
+    <div class="location-modal-content">
+      <div class="location-modal-header">
+        <h2>Choose Location</h2>
+        <button class="modal-close-btn" onclick="closeLocationPicker()">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="location-search-box">
+        <input type="text" id="locationSearch" placeholder="Search coastal locations..." autocomplete="off">
+        <button id="searchBtn" onclick="searchLocation()">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+          </svg>
+        </button>
+      </div>
+
+      <div id="searchResults" class="search-results"></div>
+
+      <div class="map-container">
+        <div id="locationMap"></div>
+        <div id="mapInstructions" class="map-instructions">
+          Search for a location, then tap the exact spot on the beach
+        </div>
+      </div>
+
+      <div id="orientationPreview" class="orientation-preview hidden">
+        <div class="preview-header">
+          <span class="preview-icon">🏖️</span>
+          <span id="previewName">Beach Name</span>
+        </div>
+        <div class="preview-details">
+          <div class="preview-item">
+            <span class="preview-label">Beach faces</span>
+            <span id="previewOrientation" class="preview-value">--</span>
+          </div>
+          <div class="preview-item">
+            <span class="preview-label">Best swell</span>
+            <span id="previewSwell" class="preview-value">--</span>
+          </div>
+          <div class="preview-item">
+            <span class="preview-label">Best wind</span>
+            <span id="previewWind" class="preview-value">--</span>
+          </div>
+        </div>
+        <button id="confirmLocationBtn" class="confirm-btn" onclick="confirmLocation()">
+          Use This Location
+        </button>
+      </div>
+
+      <div class="favorites-section">
+        <h3>Favorites</h3>
+        <div id="favoritesList" class="favorites-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+  <script src="surf.js?v=4"></script>
+</body>
+</html>
