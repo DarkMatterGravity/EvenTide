@@ -9,7 +9,9 @@
   <title>The Keepers Report</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <link rel="stylesheet" href="menu.css">
+  <link rel="stylesheet" href="location.css">
 </head>
 <body>
   <div class="menu-container">
@@ -18,6 +20,9 @@
       <div class="logo-circle"></div>
       <img src="KeeperLogo.png" alt="Keeper Logo" class="logo">
     </div>
+
+    <!-- Location Display -->
+    <div class="location-display" id="locationDisplay"></div>
 
     <!-- Surfer Image -->
     <div class="surfer-container">
@@ -31,8 +36,108 @@
     </nav>
   </div>
 
-  <!-- Register Service Worker -->
+  <!-- Location Picker Modal -->
+  <div id="locationModal" class="location-modal">
+    <div class="location-modal-content">
+      <div class="location-modal-header">
+        <h2>Choose Your Beach</h2>
+        <button class="modal-close-btn" onclick="closeLocationPicker()">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="location-search-box">
+        <input type="text" id="locationSearch" placeholder="Search coastal locations..." autocomplete="off">
+        <button id="searchBtn" onclick="searchLocation()">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+          </svg>
+        </button>
+      </div>
+
+      <div id="searchResults" class="search-results"></div>
+
+      <div class="map-container">
+        <div id="locationMap"></div>
+        <div id="mapInstructions" class="map-instructions">
+          Search for a location, then tap the exact spot on the beach
+        </div>
+      </div>
+
+      <div id="orientationPreview" class="orientation-preview hidden">
+        <div class="preview-header">
+          <span class="preview-icon">🏖️</span>
+          <span id="previewName">Beach Name</span>
+        </div>
+        <div class="preview-details">
+          <div class="preview-item">
+            <span class="preview-label">Beach faces</span>
+            <span id="previewOrientation" class="preview-value">--</span>
+          </div>
+          <div class="preview-item">
+            <span class="preview-label">Best swell</span>
+            <span id="previewSwell" class="preview-value">--</span>
+          </div>
+          <div class="preview-item">
+            <span class="preview-label">Best wind</span>
+            <span id="previewWind" class="preview-value">--</span>
+          </div>
+        </div>
+        <button id="confirmLocationBtn" class="confirm-btn" onclick="confirmLocation()">
+          Use This Location
+        </button>
+      </div>
+
+      <!-- Manual Compass Fallback -->
+      <div id="compassFallback" class="compass-fallback hidden">
+        <div class="compass-header">
+          <span>No coastline detected</span>
+          <p>Which direction does this beach face?</p>
+        </div>
+        <div class="compass-wheel">
+          <button class="compass-dir" data-dir="0" onclick="selectCompassDir(0)">N</button>
+          <button class="compass-dir" data-dir="45" onclick="selectCompassDir(45)">NE</button>
+          <button class="compass-dir" data-dir="90" onclick="selectCompassDir(90)">E</button>
+          <button class="compass-dir" data-dir="135" onclick="selectCompassDir(135)">SE</button>
+          <button class="compass-dir" data-dir="180" onclick="selectCompassDir(180)">S</button>
+          <button class="compass-dir" data-dir="225" onclick="selectCompassDir(225)">SW</button>
+          <button class="compass-dir" data-dir="270" onclick="selectCompassDir(270)">W</button>
+          <button class="compass-dir" data-dir="315" onclick="selectCompassDir(315)">NW</button>
+        </div>
+      </div>
+
+      <div class="favorites-section">
+        <h3>Favorites</h3>
+        <div id="favoritesList" class="favorites-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="location.js"></script>
   <script>
+    // Initialize menu page
+    document.addEventListener('DOMContentLoaded', () => {
+      // Render location dropdown
+      renderLocationDropdown('locationDisplay');
+
+      // Check for first launch
+      if (isFirstLaunch()) {
+        // Show location picker after a brief delay
+        setTimeout(() => {
+          openLocationPicker();
+        }, 500);
+      }
+
+      // Update display when location changes
+      onLocationChange((location) => {
+        renderLocationDropdown('locationDisplay');
+      });
+    });
+
+    // Register Service Worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js')
         .then(reg => console.log('Service Worker registered'))

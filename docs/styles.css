@@ -556,3 +556,64 @@ body {
     padding: 4px 10px;
   }
 }
+
+/* Location Button (small version for tide header) */
+.location-btn-small {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.location-btn-small:hover {
+  color: var(--text-primary);
+}
+
+/* No Tide Data Message */
+.no-tide-data {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 20px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.no-tide-icon {
+  font-size: 4rem;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.no-tide-data h2 {
+  font-size: 1.2rem;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.no-tide-data p {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  max-width: 300px;
+}
+
+.no-tide-data .menu-btn {
+  margin-top: 20px;
+  display: inline-block;
+  padding: 12px 24px;
+  background: var(--accent-blue);
+  color: white;
+  text-decoration: none;
+  border-radius: 8px;
+  font-weight: 600;
+}
