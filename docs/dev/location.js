@@ -131,10 +131,37 @@ function getCurrentLocation() {
   const favorites = loadFavorites();
   if (favorites.length > 0) {
     currentLocation = favorites[0];
+    // Ensure NOAA station is set for US locations (fixes locations saved before this feature)
+    ensureNoaaStation(currentLocation);
   } else {
     currentLocation = DEFAULT_LOCATION;
   }
   return currentLocation;
+}
+
+// Ensures a location has a NOAA station if it's in the US
+function ensureNoaaStation(location) {
+  if (!location) return;
+
+  // Already has a station
+  if (location.noaaStation) return;
+
+  // Check if it's a US location and find nearest station
+  if (isUSLocation(location.lat, location.lng)) {
+    const stationResult = findNearestStation(location.lat, location.lng);
+    if (stationResult.isNearby) {
+      location.noaaStation = stationResult.station.id;
+      console.log(`Auto-assigned NOAA station ${stationResult.station.name} (${stationResult.station.id}) to ${location.name}`);
+
+      // Update in favorites if this location is saved there
+      const favorites = loadFavorites();
+      const index = favorites.findIndex(f => f.id === location.id);
+      if (index >= 0) {
+        favorites[index].noaaStation = location.noaaStation;
+        saveFavorites(favorites);
+      }
+    }
+  }
 }
 
 function setCurrentLocation(location) {
@@ -696,7 +723,9 @@ function selectFavorite(index) {
   const favorites = loadFavorites();
   if (index < 0 || index >= favorites.length) return;
 
-  setCurrentLocation(favorites[index]);
+  const location = favorites[index];
+  ensureNoaaStation(location);
+  setCurrentLocation(location);
   closeLocationPicker();
 }
 
