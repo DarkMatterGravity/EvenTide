@@ -1,0 +1,163 @@
+/* Menu Screen Styles */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: #05203f;
+  color: #edf2f7;
+}
+
+.menu-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  height: 100dvh;
+  position: relative;
+}
+
+/* Logo */
+.logo-container {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  overflow: hidden;
+}
+
+.logo-circle {
+  display: none;
+}
+
+.logo {
+  width: 126%;
+  max-height: 79vh;
+  object-fit: contain;
+  object-position: top center;
+  margin-top: 10px;
+}
+
+/* Surfer Image */
+.surfer-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  padding: 0 10px;
+}
+
+.surfer {
+  width: 90%;
+  max-height: 17vh;
+  object-fit: contain;
+}
+
+/* Navigation Buttons */
+.menu-buttons {
+  display: flex;
+  gap: 16px;
+  padding: 15px;
+  padding-bottom: max(25px, env(safe-area-inset-bottom, 25px));
+  width: 100%;
+  max-width: 340px;
+  margin: 0 auto;
+  margin-top: auto;
+  flex-shrink: 0;
+}
+
+.menu-btn {
+  flex: 1;
+  padding: 14px 19px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  color: #1a1a2e;
+  border-radius: 11px;
+  background: linear-gradient(to top, #ed8936, #ecc94b);
+  border: none;
+  font-size: 1.35rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+}
+
+.menu-btn:hover {
+  filter: brightness(1.05);
+}
+
+.menu-btn:active {
+  filter: brightness(0.95);
+  transform: scale(0.98);
+}
+
+.menu-btn:focus {
+  outline: none;
+}
+
+.menu-btn:focus-visible {
+  outline: 2px solid #d4c1a7;
+  outline-offset: 2px;
+}
+
+/* Location overlay - positioned at top without disrupting layout */
+.location-overlay {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.location-overlay .location-btn {
+  pointer-events: auto;
+  background: rgba(22, 33, 62, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 0.8rem;
+  padding: 8px 14px;
+}
+
+/* Mobile adjustments */
+@media (max-width: 500px) {
+  .menu-btn {
+    font-size: 1.2rem;
+    padding: 11px 16px;
+  }
+
+  .logo {
+    width: 115%;
+    max-height: 55vh;
+  }
+
+  .surfer {
+    width: 85%;
+  }
+}
+
+/* Short screens */
+@media (max-height: 700px) {
+  .logo {
+    max-height: 50vh;
+  }
+
+  .menu-btn {
+    padding: 10px 14px;
+    font-size: 1.05rem;
+  }
+}
