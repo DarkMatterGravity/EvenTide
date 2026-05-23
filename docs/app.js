@@ -1,15 +1,32 @@
 // KeepersReport PWA - Combined API and Renderer
+// Uses shared location.js for location management
 
 // ============================================
 // API MODULE
 // ============================================
 
-const STATION_ID = '8531680';
-const BUOY_ID = '44065';
+// Dynamic station/coordinates from location module
+function getStationId() {
+  const location = getCurrentLocation();
+  return location?.noaaStation || '8531680';
+}
+
+function getCoordinates() {
+  const location = getCurrentLocation();
+  return {
+    lat: location?.lat || 40.4667,
+    lng: location?.lng || -74.01
+  };
+}
+
+function hasNoaaStation() {
+  const location = getCurrentLocation();
+  return location?.noaaStation != null;
+}
+
+const BUOY_ID = '44065'; // TODO: Make this dynamic based on location
 const BASE_URL = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter';
 const NDBC_URL = 'https://www.ndbc.noaa.gov/data/realtime2';
-const SANDY_HOOK_LAT = 40.4667;
-const SANDY_HOOK_LNG = -74.01;
 
 const cache = {
   predictions: { data: null, timestamp: 0 },
@@ -59,7 +76,7 @@ async function fetchPredictions(date = new Date()) {
   return fetchWithCache('predictions', async () => {
     const dateStr = formatDateForAPI(date);
     const url = buildUrl({
-      begin_date: dateStr, end_date: dateStr, station: STATION_ID,
+      begin_date: dateStr, end_date: dateStr, station: getStationId(),
       product: 'predictions', datum: 'MLLW', units: 'english',
       time_zone: 'lst_ldt', format: 'json', application: 'KeepersReport'
     });
@@ -75,7 +92,7 @@ async function fetchHighLow(date = new Date()) {
   return fetchWithCache('highLow', async () => {
     const dateStr = formatDateForAPI(date);
     const url = buildUrl({
-      begin_date: dateStr, end_date: dateStr, station: STATION_ID,
+      begin_date: dateStr, end_date: dateStr, station: getStationId(),
       product: 'predictions', datum: 'MLLW', units: 'english',
       time_zone: 'lst_ldt', interval: 'hilo', format: 'json', application: 'KeepersReport'
     });
@@ -91,7 +108,7 @@ async function fetchObserved(date = new Date()) {
   return fetchWithCache('observed', async () => {
     const dateStr = formatDateForAPI(date);
     const url = buildUrl({
-      begin_date: dateStr, end_date: dateStr, station: STATION_ID,
+      begin_date: dateStr, end_date: dateStr, station: getStationId(),
       product: 'water_level', datum: 'MLLW', units: 'english',
       time_zone: 'lst_ldt', format: 'json', application: 'KeepersReport'
     });
@@ -132,7 +149,7 @@ async function fetchWaveData() {
 async function fetchTemperatures() {
   return fetchWithCache('temps', async () => {
     // Air temp from NOAA tide station
-    const airResponse = await fetch(buildUrl({ date: 'latest', station: STATION_ID,
+    const airResponse = await fetch(buildUrl({ date: 'latest', station: getStationId(),
       product: 'air_temperature', units: 'english', time_zone: 'lst_ldt',
       format: 'json', application: 'KeepersReport' }));
 
@@ -167,7 +184,8 @@ async function fetchTemperatures() {
 
 async function fetchSunTimes() {
   return fetchWithCache('sunTimes', async () => {
-    const url = `https://api.sunrise-sunset.org/json?lat=${SANDY_HOOK_LAT}&lng=${SANDY_HOOK_LNG}&formatted=0`;
+    const coords = getCoordinates();
+    const url = `https://api.sunrise-sunset.org/json?lat=${coords.lat}&lng=${coords.lng}&formatted=0`;
     const response = await fetch(url);
     if (!response.ok) throw new Error('Failed to fetch sun times');
     const data = await response.json();
@@ -216,11 +234,71 @@ let maxWaveToday = null;
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
+  // Get current location
+  const location = getCurrentLocation();
+  updateTideLocationDisplay();
+
+  // Check if we have NOAA station data for this location
+  if (!hasNoaaStation()) {
+    showNoTideData();
+    return;
+  }
+
+  // Has NOAA station - show tide content
+  showTideContent();
+
   updateCurrentTime();
   setInterval(updateCurrentTime, 1000);
   await loadTideData();
   refreshInterval = setInterval(refreshObservedData, 6 * 60 * 1000);
   setInterval(checkMidnightReload, 60 * 1000);
+
+  // Listen for location changes
+  onLocationChange(async (newLocation) => {
+    updateTideLocationDisplay();
+    clearCache();
+
+    if (!hasNoaaStation()) {
+      showNoTideData();
+    } else {
+      showTideContent();
+      await loadTideData();
+    }
+  });
+}
+
+function updateTideLocationDisplay() {
+  const location = getCurrentLocation();
+  const nameEl = document.getElementById('tideLocationName');
+  const titleEl = document.getElementById('tideTitle');
+
+  if (nameEl && location) {
+    nameEl.textContent = location.name;
+  }
+  if (titleEl && location) {
+    const shortName = location.name.split(',')[0].toUpperCase();
+    titleEl.textContent = `${shortName} TIDES`;
+  }
+}
+
+function showNoTideData() {
+  const content = document.getElementById('tideContent');
+  const noData = document.getElementById('noTideData');
+  const footer = document.querySelector('.footer');
+
+  if (content) content.style.display = 'none';
+  if (noData) noData.style.display = 'flex';
+  if (footer) footer.style.display = 'none';
+}
+
+function showTideContent() {
+  const content = document.getElementById('tideContent');
+  const noData = document.getElementById('noTideData');
+  const footer = document.querySelector('.footer');
+
+  if (content) content.style.display = 'flex';
+  if (noData) noData.style.display = 'none';
+  if (footer) footer.style.display = 'flex';
 }
 
 function checkMidnightReload() {

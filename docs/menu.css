@@ -111,6 +111,28 @@ body {
   outline-offset: 2px;
 }
 
+/* Location overlay - positioned at top without disrupting layout */
+.location-overlay {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.location-overlay .location-btn {
+  pointer-events: auto;
+  background: rgba(22, 33, 62, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 0.8rem;
+  padding: 8px 14px;
+}
+
 /* Mobile adjustments */
 @media (max-width: 500px) {
   .menu-btn {

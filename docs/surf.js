@@ -1,120 +1,108 @@
 // Surf Forecast JavaScript
-
-const LOCATIONS = {
-  'sandy-hook': {
-    name: 'Sandy Hook, NJ',
-    lat: 40.4667,
-    lng: -74.01,
-    timezone: 'America/New_York',
-    optimal: {
-      swellDirs: [90, 112.5, 135], // E, ESE, SE
-      windDirs: [270, 315], // W, NW (offshore)
-    }
-  },
-  'uluwatu': {
-    name: 'Uluwatu, Bali',
-    lat: -8.83,
-    lng: 115.08,
-    timezone: 'Asia/Makassar',
-    optimal: {
-      swellDirs: [180, 202.5, 225], // S, SSW, SW
-      windDirs: [0, 45], // N, NE (offshore)
-    }
-  },
-  'nazare': {
-    name: 'Nazaré, Portugal',
-    lat: 39.6021,
-    lng: -9.0698,
-    timezone: 'Europe/Lisbon',
-    optimal: {
-      swellDirs: [270, 292.5, 315], // W, WNW, NW
-      windDirs: [90, 45], // E, NE (offshore)
-    }
-  }
-};
-
-let currentLocation = 'sandy-hook';
-
-// Toggle hourly section expand/collapse
-function toggleHourlyExpand(event) {
-  // Don't toggle if clicking on the close button (it handles itself)
-  if (event && event.target.closest('.close-btn')) return;
-
-  const section = document.getElementById('hourlySection');
-
-  // If already expanded and clicking inside list, don't collapse
-  if (section.classList.contains('expanded') && event && event.target.closest('.hourly-list')) {
-    return;
-  }
-
-  section.classList.toggle('expanded');
-}
-
-// Close button handler
-function closeHourlyExpand(event) {
-  event.stopPropagation();
-  const section = document.getElementById('hourlySection');
-  section.classList.remove('expanded');
-}
-
-// Get optimal conditions for current location
-function getOptimal() {
-  const loc = LOCATIONS[currentLocation];
-  return {
-    swellDirs: loc.optimal.swellDirs,
-    windDirs: loc.optimal.windDirs,
-    minHeight: 3,
-    maxHeight: 6,
-    minPeriod: 8
-  };
-}
+// Uses shared location.js for location management
 
 let forecastChart = null;
 
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
-  // Set up location dropdown
-  const dropdown = document.getElementById('locationSelect');
-  if (dropdown) {
-    dropdown.addEventListener('change', (e) => {
-      switchLocation(e.target.value);
-    });
-  }
+  // Get current location from shared module
+  const location = getCurrentLocation();
 
+  // Update UI
   updateLocationName();
+  updateGuideSection();
+
+  // Load data
   await Promise.all([
     loadForecast(),
     loadSunTimes()
   ]);
+
+  // Listen for location changes
+  onLocationChange(async (newLocation) => {
+    updateLocationName();
+    updateGuideSection();
+    showLoadingState();
+    await Promise.all([
+      loadForecast(),
+      loadSunTimes()
+    ]);
+  });
 }
 
 function updateLocationName() {
-  const loc = LOCATIONS[currentLocation];
+  const location = getCurrentLocation();
   const nameEl = document.getElementById('locationName');
-  if (nameEl) nameEl.textContent = loc.name;
+  if (nameEl && location) {
+    nameEl.textContent = location.name;
+  }
 }
 
-async function switchLocation(locationId) {
-  if (!LOCATIONS[locationId]) return;
-  currentLocation = locationId;
+function updateGuideSection() {
+  const location = getCurrentLocation();
+  if (!location) return;
 
-  // Show loading state
+  // Update guide title
+  const titleEl = document.getElementById('guideTitle');
+  if (titleEl) {
+    const shortName = location.name.split(',')[0];
+    titleEl.textContent = `${shortName} Surf Guide`;
+  }
+
+  // Update optimal swell directions
+  const swellEl = document.getElementById('guideSwell');
+  if (swellEl && location.optimal) {
+    swellEl.textContent = location.optimal.swellDirs
+      .slice(0, 3)
+      .map(d => degreesToCardinal(d))
+      .join(', ');
+  }
+
+  // Update optimal wind directions
+  const windEl = document.getElementById('guideWind');
+  if (windEl && location.optimal) {
+    windEl.textContent = location.optimal.windDirs
+      .slice(0, 3)
+      .map(d => degreesToCardinal(d))
+      .join(', ') + ' (offshore)';
+  }
+}
+
+function showLoadingState() {
   document.getElementById('currentWaveHeight').textContent = '--';
   document.getElementById('currentPeriod').textContent = '--';
   document.getElementById('currentSwellDir').textContent = '--';
   document.getElementById('currentWind').textContent = '--';
+}
 
-  await Promise.all([
-    loadForecast(),
-    loadSunTimes()
-  ]);
+// Get optimal conditions for current location
+function getOptimal() {
+  const location = getCurrentLocation();
+  if (!location || !location.optimal) {
+    return {
+      swellDirs: [90, 112.5, 67.5],
+      windDirs: [270, 315, 225],
+      minHeight: 3,
+      maxHeight: 6,
+      minPeriod: 8
+    };
+  }
+  return {
+    swellDirs: location.optimal.swellDirs,
+    windDirs: location.optimal.windDirs,
+    minHeight: 3,
+    maxHeight: 6,
+    minPeriod: 8
+  };
 }
 
 async function loadSunTimes() {
-  const loc = LOCATIONS[currentLocation];
+  const location = getCurrentLocation();
+  if (!location) return;
+
   try {
-    const url = `https://api.sunrise-sunset.org/json?lat=${loc.lat}&lng=${loc.lng}&formatted=0`;
+    const url = `https://api.sunrise-sunset.org/json?lat=${location.lat}&lng=${location.lng}&formatted=0`;
     const response = await fetch(url);
     const data = await response.json();
 
@@ -140,24 +128,23 @@ async function loadSunTimes() {
 }
 
 async function loadForecast() {
-  const loc = LOCATIONS[currentLocation];
-  const tz = encodeURIComponent(loc.timezone);
+  const location = getCurrentLocation();
+  if (!location) return;
+
+  const tz = encodeURIComponent(location.timezone || 'America/New_York');
   try {
-    // Fetch from Open-Meteo Marine API (free, no key needed)
-    const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${loc.lat}&longitude=${loc.lng}&hourly=wave_height,wave_direction,wave_period,wind_wave_height,swell_wave_height,swell_wave_direction,swell_wave_period&timezone=${tz}&forecast_days=3`;
+    const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${location.lat}&longitude=${location.lng}&hourly=wave_height,wave_direction,wave_period,wind_wave_height,swell_wave_height,swell_wave_direction,swell_wave_period&timezone=${tz}&forecast_days=3`;
 
     const response = await fetch(url);
     if (!response.ok) throw new Error('Failed to fetch forecast');
 
     const data = await response.json();
 
-    // Also get wind data from Open-Meteo Weather API
-    const windUrl = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lng}&hourly=wind_speed_10m,wind_direction_10m&timezone=${tz}&forecast_days=3&wind_speed_unit=mph`;
+    const windUrl = `https://api.open-meteo.com/v1/forecast?latitude=${location.lat}&longitude=${location.lng}&hourly=wind_speed_10m,wind_direction_10m&timezone=${tz}&forecast_days=3&wind_speed_unit=mph`;
 
     const windResponse = await fetch(windUrl);
     const windData = await windResponse.json();
 
-    // Process and display
     const forecast = processForecast(data, windData);
     displayCurrentConditions(forecast[0]);
     displayHourlyForecast(forecast);
@@ -174,7 +161,6 @@ function processForecast(marineData, windData) {
   const hours = marineData.hourly.time;
   const now = new Date();
 
-  // Find the index of the current hour (or nearest future hour)
   let startIndex = 0;
   for (let i = 0; i < hours.length; i++) {
     const hourTime = new Date(hours[i]);
@@ -187,7 +173,6 @@ function processForecast(marineData, windData) {
   for (let i = startIndex; i < Math.min(hours.length, startIndex + 48); i++) {
     const time = new Date(hours[i]);
 
-    // Use swell height if available, otherwise total wave height
     const swellHeight = marineData.hourly.swell_wave_height?.[i];
     const totalHeight = marineData.hourly.wave_height?.[i];
     const waveHeightM = swellHeight || totalHeight || 0;
@@ -220,67 +205,61 @@ function processForecast(marineData, windData) {
 
 function calculateRating(height, period, swellDir, windSpeed, windDir) {
   const OPTIMAL = getOptimal();
-  let score = 50; // Start at fair
+  let score = 50;
 
-  // Wave height scoring (0-30 points)
   if (height < 1) {
-    score -= 40; // Flat
+    score -= 40;
   } else if (height >= OPTIMAL.minHeight && height <= OPTIMAL.maxHeight) {
-    score += 25; // Ideal height
+    score += 25;
   } else if (height > OPTIMAL.maxHeight && height <= 8) {
-    score += 15; // Good but big
+    score += 15;
   } else if (height > 8) {
-    score += 5; // Too big for most
+    score += 5;
   } else if (height >= 2) {
-    score += 10; // Rideable
+    score += 10;
   }
 
-  // Period scoring (0-25 points)
   if (period >= 12) {
-    score += 25; // Long period ground swell
+    score += 25;
   } else if (period >= OPTIMAL.minPeriod) {
-    score += 20; // Good period
+    score += 20;
   } else if (period >= 6) {
-    score += 10; // Short period
+    score += 10;
   } else {
-    score -= 10; // Wind chop
+    score -= 10;
   }
 
-  // Swell direction scoring (0-20 points)
   const swellDirDiff = Math.min(
     ...OPTIMAL.swellDirs.map(d => Math.abs(angleDiff(swellDir, d)))
   );
   if (swellDirDiff <= 15) {
-    score += 20; // Perfect direction
+    score += 20;
   } else if (swellDirDiff <= 30) {
-    score += 15; // Good direction
+    score += 15;
   } else if (swellDirDiff <= 45) {
-    score += 10; // OK direction
+    score += 10;
   } else if (swellDirDiff <= 60) {
-    score += 5; // Marginal
+    score += 5;
   }
 
-  // Wind scoring (0-25 points)
   const windDirDiff = Math.min(
     ...OPTIMAL.windDirs.map(d => Math.abs(angleDiff(windDir, d)))
   );
 
   if (windSpeed < 5) {
-    score += 20; // Glass
+    score += 20;
   } else if (windSpeed < 10 && windDirDiff <= 45) {
-    score += 25; // Light offshore
+    score += 25;
   } else if (windSpeed < 15 && windDirDiff <= 45) {
-    score += 15; // Offshore but breezy
+    score += 15;
   } else if (windSpeed < 10) {
-    score += 10; // Light onshore
+    score += 10;
   } else if (windSpeed >= 20) {
-    score -= 15; // Too windy
+    score -= 15;
   }
 
-  // Clamp score
   score = Math.max(0, Math.min(100, score));
 
-  // Determine rating label
   let label, className;
   if (height < 1) {
     label = 'FLAT';
@@ -307,11 +286,6 @@ function angleDiff(a, b) {
   return diff > 180 ? 360 - diff : diff;
 }
 
-function degreesToCardinal(degrees) {
-  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
-  return dirs[Math.round(degrees / 22.5) % 16];
-}
-
 function displayCurrentConditions(current) {
   document.getElementById('currentWaveHeight').textContent = current.waveHeight.toFixed(1);
   document.getElementById('currentPeriod').textContent = current.period.toFixed(0);
@@ -327,7 +301,6 @@ function displayCurrentConditions(current) {
   ratingEl.textContent = current.rating.label;
   ratingEl.className = `rating rating-${current.rating.className}`;
 
-  // Scale wave image based on wave height (6ft surfer = reference)
   updateWaveScale(current.waveHeight);
 }
 
@@ -336,28 +309,22 @@ function updateWaveScale(waveHeightFt) {
   const surferImg = document.getElementById('surferImg');
   if (!waveLine || !surferImg) return;
 
-  // Surfer is 6ft reference
   const SURFER_HEIGHT_FT = 6;
-  const SURFER_BASE_PX = 150; // matches CSS base height
-  const MAX_WAVE_LINE_PX = 140; // max line position (just above surfer head)
+  const SURFER_BASE_PX = 150;
+  const MAX_WAVE_LINE_PX = 140;
 
   let waveLinePx;
   let surferHeightPx = SURFER_BASE_PX;
 
   if (waveHeightFt <= 10) {
-    // Normal waves: line scales with wave height
     waveLinePx = (waveHeightFt / SURFER_HEIGHT_FT) * SURFER_BASE_PX;
     waveLinePx = Math.max(5, Math.min(MAX_WAVE_LINE_PX, waveLinePx));
   } else {
-    // Giant waves (>10ft): line at max, surfer shrinks to show scale
     waveLinePx = MAX_WAVE_LINE_PX;
-    // Shrink surfer so the ratio still makes sense
-    // e.g., 20ft wave = surfer at 50% (6ft person looks half the wave height)
     surferHeightPx = SURFER_BASE_PX * (10 / waveHeightFt);
-    surferHeightPx = Math.max(30, surferHeightPx); // don't go below 30px
+    surferHeightPx = Math.max(30, surferHeightPx);
   }
 
-  // Apply position - bottom offset positions the dotted line
   waveLine.style.bottom = `${waveLinePx}px`;
   surferImg.style.height = `${surferHeightPx}px`;
 }
@@ -394,7 +361,6 @@ function createChart(forecast) {
 
   if (forecastChart) forecastChart.destroy();
 
-  // Create gradient based on ratings
   const gradient = ctx.createLinearGradient(0, 0, 0, 200);
   gradient.addColorStop(0, 'rgba(66, 153, 225, 0.3)');
   gradient.addColorStop(1, 'rgba(66, 153, 225, 0.05)');
@@ -505,4 +471,23 @@ function createChart(forecast) {
       }
     }
   });
+}
+
+// Toggle hourly section expand/collapse
+function toggleHourlyExpand(event) {
+  if (event && event.target.closest('.close-btn')) return;
+
+  const section = document.getElementById('hourlySection');
+
+  if (section.classList.contains('expanded') && event && event.target.closest('.hourly-list')) {
+    return;
+  }
+
+  section.classList.toggle('expanded');
+}
+
+function closeHourlyExpand(event) {
+  event.stopPropagation();
+  const section = document.getElementById('hourlySection');
+  section.classList.remove('expanded');
 }
