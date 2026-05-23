@@ -263,40 +263,370 @@ async function testBeachOrientation() {
 // END COASTLINE ORIENTATION DETECTION
 // ============================================
 
-const LOCATIONS = {
+// ============================================
+// LOCATION MANAGEMENT
+// ============================================
+
+// Default locations (fallback if no favorites)
+const DEFAULT_LOCATIONS = {
   'sandy-hook': {
+    id: 'sandy-hook',
     name: 'Sandy Hook, NJ',
     lat: 40.4667,
     lng: -74.01,
     timezone: 'America/New_York',
+    orientation: 90,
     optimal: {
-      swellDirs: [90, 112.5, 135], // E, ESE, SE
-      windDirs: [270, 315], // W, NW (offshore)
-    }
-  },
-  'uluwatu': {
-    name: 'Uluwatu, Bali',
-    lat: -8.83,
-    lng: 115.08,
-    timezone: 'Asia/Makassar',
-    optimal: {
-      swellDirs: [180, 202.5, 225], // S, SSW, SW
-      windDirs: [0, 45], // N, NE (offshore)
-    }
-  },
-  'nazare': {
-    name: 'Nazaré, Portugal',
-    lat: 39.6021,
-    lng: -9.0698,
-    timezone: 'Europe/Lisbon',
-    optimal: {
-      swellDirs: [270, 292.5, 315], // W, WNW, NW
-      windDirs: [90, 45], // E, NE (offshore)
+      swellDirs: [90, 112.5, 67.5],
+      windDirs: [270, 315, 225],
     }
   }
 };
 
-let currentLocation = 'sandy-hook';
+// Current active location
+let currentLocation = null;
+
+// Map instance
+let locationMap = null;
+let mapMarker = null;
+let pendingLocation = null; // Location being selected but not yet confirmed
+
+// Load favorites from localStorage
+function loadFavorites() {
+  try {
+    const saved = localStorage.getItem('surfFavorites');
+    return saved ? JSON.parse(saved) : [];
+  } catch (e) {
+    console.error('Failed to load favorites:', e);
+    return [];
+  }
+}
+
+// Save favorites to localStorage
+function saveFavorites(favorites) {
+  try {
+    localStorage.setItem('surfFavorites', JSON.stringify(favorites));
+  } catch (e) {
+    console.error('Failed to save favorites:', e);
+  }
+}
+
+// Get timezone for coordinates (using browser's guess based on offset)
+async function getTimezone(lat, lng) {
+  // Simple approach: use a timezone API or default to browser timezone
+  // For now, we'll use a free API
+  try {
+    const response = await fetch(`https://timeapi.io/api/Time/current/coordinate?latitude=${lat}&longitude=${lng}`);
+    if (response.ok) {
+      const data = await response.json();
+      return data.timeZone;
+    }
+  } catch (e) {
+    console.warn('Timezone API failed, using browser timezone');
+  }
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+// ============================================
+// LOCATION PICKER UI
+// ============================================
+
+function openLocationPicker() {
+  const modal = document.getElementById('locationModal');
+  modal.classList.add('open');
+
+  // Initialize map if not already done
+  if (!locationMap) {
+    initLocationMap();
+  }
+
+  // Render favorites
+  renderFavorites();
+
+  // Clear any pending selection
+  pendingLocation = null;
+  document.getElementById('orientationPreview').classList.add('hidden');
+  document.getElementById('searchResults').innerHTML = '';
+  document.getElementById('locationSearch').value = '';
+}
+
+function closeLocationPicker() {
+  const modal = document.getElementById('locationModal');
+  modal.classList.remove('open');
+}
+
+function initLocationMap() {
+  // Initialize Leaflet map
+  locationMap = L.map('locationMap', {
+    zoomControl: true,
+    attributionControl: false
+  }).setView([20, 0], 2);
+
+  // Add OpenStreetMap tiles
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+  }).addTo(locationMap);
+
+  // Handle map clicks
+  locationMap.on('click', onMapClick);
+}
+
+async function onMapClick(e) {
+  const { lat, lng } = e.latlng;
+
+  // Place or move marker
+  if (mapMarker) {
+    mapMarker.setLatLng([lat, lng]);
+  } else {
+    mapMarker = L.marker([lat, lng]).addTo(locationMap);
+  }
+
+  // Update instructions
+  document.getElementById('mapInstructions').textContent = 'Detecting beach orientation...';
+
+  // Detect orientation
+  const result = await detectBeachOrientation(lat, lng);
+
+  if (result.orientation !== null) {
+    // Get optimal directions
+    const optimal = calculateOptimalDirections(result.orientation);
+
+    // Reverse geocode for location name
+    let locationName = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+    try {
+      const geoResponse = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+      if (geoResponse.ok) {
+        const geoData = await geoResponse.json();
+        // Build a nice name from the response
+        const parts = [];
+        if (geoData.address) {
+          if (geoData.address.beach) parts.push(geoData.address.beach);
+          else if (geoData.address.tourism) parts.push(geoData.address.tourism);
+          else if (geoData.address.suburb) parts.push(geoData.address.suburb);
+          else if (geoData.address.town) parts.push(geoData.address.town);
+          else if (geoData.address.city) parts.push(geoData.address.city);
+          else if (geoData.address.village) parts.push(geoData.address.village);
+
+          if (geoData.address.state) parts.push(geoData.address.state);
+          else if (geoData.address.country) parts.push(geoData.address.country);
+        }
+        if (parts.length > 0) {
+          locationName = parts.join(', ');
+        }
+      }
+    } catch (e) {
+      console.warn('Reverse geocoding failed');
+    }
+
+    // Store pending location
+    pendingLocation = {
+      id: `custom-${Date.now()}`,
+      name: locationName,
+      lat: lat,
+      lng: lng,
+      orientation: result.orientation,
+      confidence: result.confidence,
+      optimal: optimal
+    };
+
+    // Show preview
+    showOrientationPreview(pendingLocation);
+    document.getElementById('mapInstructions').textContent = 'Tap elsewhere to try a different spot';
+  } else {
+    // No coastline found
+    document.getElementById('mapInstructions').textContent = result.error || 'No coastline found nearby. Try tapping closer to the water.';
+    document.getElementById('orientationPreview').classList.add('hidden');
+    pendingLocation = null;
+  }
+}
+
+function showOrientationPreview(location) {
+  const preview = document.getElementById('orientationPreview');
+
+  document.getElementById('previewName').textContent = location.name;
+  document.getElementById('previewOrientation').textContent =
+    `${degreesToCardinal(location.orientation)} (${location.orientation}°)`;
+  document.getElementById('previewSwell').textContent =
+    location.optimal.swellDirs.slice(0, 3).map(d => degreesToCardinal(d)).join(', ');
+  document.getElementById('previewWind').textContent =
+    location.optimal.windDirs.slice(0, 3).map(d => degreesToCardinal(d)).join(', ');
+
+  preview.classList.remove('hidden');
+}
+
+async function confirmLocation() {
+  if (!pendingLocation) return;
+
+  // Get timezone
+  const timezone = await getTimezone(pendingLocation.lat, pendingLocation.lng);
+  pendingLocation.timezone = timezone;
+
+  // Add to favorites
+  const favorites = loadFavorites();
+
+  // Check if we already have this location (by coordinates proximity)
+  const existingIndex = favorites.findIndex(f =>
+    Math.abs(f.lat - pendingLocation.lat) < 0.001 &&
+    Math.abs(f.lng - pendingLocation.lng) < 0.001
+  );
+
+  if (existingIndex >= 0) {
+    // Update existing
+    favorites[existingIndex] = pendingLocation;
+  } else {
+    // Add new (max 5)
+    if (favorites.length >= 5) {
+      alert('Maximum 5 favorites. Please remove one first.');
+      return;
+    }
+    favorites.unshift(pendingLocation);
+  }
+
+  saveFavorites(favorites);
+
+  // Set as current location and load forecast
+  currentLocation = pendingLocation;
+  updateLocationName();
+  closeLocationPicker();
+
+  await Promise.all([
+    loadForecast(),
+    loadSunTimes()
+  ]);
+}
+
+// ============================================
+// LOCATION SEARCH
+// ============================================
+
+async function searchLocation() {
+  const query = document.getElementById('locationSearch').value.trim();
+  if (!query) return;
+
+  const resultsDiv = document.getElementById('searchResults');
+  resultsDiv.innerHTML = '<div class="detecting-loader">Searching...</div>';
+
+  try {
+    // Use Nominatim for geocoding
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5`
+    );
+
+    if (!response.ok) throw new Error('Search failed');
+
+    const results = await response.json();
+
+    if (results.length === 0) {
+      resultsDiv.innerHTML = '<div class="no-favorites">No results found</div>';
+      return;
+    }
+
+    resultsDiv.innerHTML = results.map(r => `
+      <div class="search-result-item" onclick="selectSearchResult(${r.lat}, ${r.lon}, '${r.display_name.replace(/'/g, "\\'")}')">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+        </svg>
+        <div>
+          <div class="search-result-name">${r.display_name.split(',').slice(0, 2).join(',')}</div>
+          <div class="search-result-detail">${r.display_name.split(',').slice(2, 4).join(',')}</div>
+        </div>
+      </div>
+    `).join('');
+
+  } catch (e) {
+    console.error('Search failed:', e);
+    resultsDiv.innerHTML = '<div class="no-favorites">Search failed. Try again.</div>';
+  }
+}
+
+function selectSearchResult(lat, lng, name) {
+  // Clear search results
+  document.getElementById('searchResults').innerHTML = '';
+
+  // Pan map to location
+  locationMap.setView([lat, lng], 14);
+
+  // Update instructions
+  document.getElementById('mapInstructions').textContent = 'Now tap the exact spot on the beach where you surf';
+}
+
+// Add enter key support for search
+document.addEventListener('DOMContentLoaded', () => {
+  const searchInput = document.getElementById('locationSearch');
+  if (searchInput) {
+    searchInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        searchLocation();
+      }
+    });
+  }
+});
+
+// ============================================
+// FAVORITES MANAGEMENT
+// ============================================
+
+function renderFavorites() {
+  const favorites = loadFavorites();
+  const container = document.getElementById('favoritesList');
+
+  if (favorites.length === 0) {
+    container.innerHTML = '<div class="no-favorites">No saved locations yet</div>';
+    return;
+  }
+
+  container.innerHTML = favorites.map((fav, index) => `
+    <div class="favorite-item ${currentLocation?.id === fav.id ? 'active' : ''}"
+         onclick="selectFavorite(${index})">
+      <span class="favorite-star">★</span>
+      <span class="favorite-name">${fav.name}</span>
+      <span class="favorite-orientation">${degreesToCardinal(fav.orientation)}</span>
+      <button class="favorite-delete" onclick="event.stopPropagation(); deleteFavorite(${index})">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z"/>
+        </svg>
+      </button>
+    </div>
+  `).join('');
+}
+
+async function selectFavorite(index) {
+  const favorites = loadFavorites();
+  if (index < 0 || index >= favorites.length) return;
+
+  currentLocation = favorites[index];
+  updateLocationName();
+  closeLocationPicker();
+
+  await Promise.all([
+    loadForecast(),
+    loadSunTimes()
+  ]);
+}
+
+function deleteFavorite(index) {
+  const favorites = loadFavorites();
+  if (index < 0 || index >= favorites.length) return;
+
+  // Check if this is the current location
+  const isCurrentLocation = currentLocation?.id === favorites[index].id;
+
+  favorites.splice(index, 1);
+  saveFavorites(favorites);
+  renderFavorites();
+
+  // If we deleted the current location, switch to first favorite or default
+  if (isCurrentLocation) {
+    if (favorites.length > 0) {
+      currentLocation = favorites[0];
+    } else {
+      currentLocation = DEFAULT_LOCATIONS['sandy-hook'];
+    }
+    updateLocationName();
+    loadForecast();
+    loadSunTimes();
+  }
+}
 
 // Toggle hourly section expand/collapse
 function toggleHourlyExpand(event) {
