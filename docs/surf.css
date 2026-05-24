@@ -58,6 +58,34 @@ body {
   display: none;
 }
 
+/* Notification Button */
+.notify-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 8px;
+  margin-left: 8px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.notify-btn:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.notify-btn.active {
+  color: var(--accent-green);
+}
+
+.notify-btn.active svg {
+  fill: var(--accent-green);
+}
+
 .back-btn {
   color: var(--text-secondary);
   text-decoration: none;

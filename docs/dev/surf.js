@@ -485,3 +485,126 @@ function closeHourlyExpand(event) {
   const section = document.getElementById('hourlySection');
   section.classList.remove('expanded');
 }
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
+
+async function toggleNotifications() {
+  const btn = document.getElementById('notifyBtn');
+  const location = getCurrentLocation();
+
+  if (!location) {
+    alert('Please select a location first');
+    return;
+  }
+
+  // Check current permission
+  const permission = getNotificationPermission();
+
+  if (permission === 'unsupported') {
+    alert('Notifications are not supported in this browser');
+    return;
+  }
+
+  if (permission === 'denied') {
+    alert('Notifications are blocked. Please enable them in your browser settings.');
+    return;
+  }
+
+  // If not granted, request permission
+  if (permission !== 'granted') {
+    const granted = await requestNotificationPermission();
+    if (!granted) {
+      alert('Notification permission was denied');
+      return;
+    }
+  }
+
+  // Check if already subscribed for this location
+  const prefs = await getNotificationPrefs();
+  const existingPref = prefs.find(p =>
+    Math.abs(p.lat - location.lat) < 0.001 &&
+    Math.abs(p.lng - location.lng) < 0.001
+  );
+
+  if (existingPref) {
+    // Already subscribed - unsubscribe
+    await deleteNotificationPrefs(location.lat, location.lng);
+    btn.classList.remove('active');
+    btn.title = 'Enable notifications';
+    showNotificationToast('Notifications disabled for ' + location.name.split(',')[0]);
+  } else {
+    // Subscribe
+    // First register device if not already
+    const deviceId = localStorage.getItem('supabaseDeviceId');
+    if (!deviceId) {
+      // For web, we use a placeholder token (real push tokens come from FCM/APNs)
+      await registerDevice('web-' + getDeviceId(), 'web');
+    }
+
+    await saveNotificationPrefs(location, {
+      notify_good_conditions: true,
+      notify_tide_falling: true,
+      notify_tide_rising: true
+    });
+
+    btn.classList.add('active');
+    btn.title = 'Notifications enabled';
+    showNotificationToast('Notifications enabled for ' + location.name.split(',')[0]);
+  }
+}
+
+function showNotificationToast(message) {
+  // Simple toast notification
+  const toast = document.createElement('div');
+  toast.className = 'notification-toast';
+  toast.textContent = message;
+  toast.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-card, #16213e);
+    color: var(--text-primary, #edf2f7);
+    padding: 12px 20px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color, #2d3748);
+    z-index: 9999;
+    animation: slideUp 0.3s ease;
+  `;
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.animation = 'fadeOut 0.3s ease';
+    setTimeout(() => toast.remove(), 300);
+  }, 2500);
+}
+
+// Update notification button state on load
+async function updateNotificationButton() {
+  const btn = document.getElementById('notifyBtn');
+  if (!btn) return;
+
+  const location = getCurrentLocation();
+  if (!location) return;
+
+  const prefs = await getNotificationPrefs();
+  const existingPref = prefs.find(p =>
+    Math.abs(p.lat - location.lat) < 0.001 &&
+    Math.abs(p.lng - location.lng) < 0.001
+  );
+
+  if (existingPref) {
+    btn.classList.add('active');
+    btn.title = 'Notifications enabled';
+  } else {
+    btn.classList.remove('active');
+    btn.title = 'Enable notifications';
+  }
+}
+
+// Update button state after init
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(updateNotificationButton, 500);
+});
