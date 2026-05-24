@@ -16,11 +16,12 @@
 | Coastline Detection | Overpass API (cached) |
 | Sun Times | suncalc library (client-side) |
 | Database | Supabase |
-| Push (planned) | Firebase Cloud Messaging |
+| Push Notifications | Firebase Cloud Messaging |
 
 ### Key Files
 - `location.js` - Shared location module (search, favorites, NOAA stations)
-- `notifications.js` - Supabase integration for push notification preferences
+- `notifications.js` - Supabase + Firebase FCM integration
+- `firebase-messaging-sw.js` - Service worker for background push notifications
 - `surf.js` - Surf forecast page logic
 - `app.js` - Tide page logic
 - `location.css` - Shared location picker styles
@@ -44,12 +45,15 @@
 - **Sunrise-Sunset.org → suncalc**: Client-side calculation, no API needed
 - **Coastline caching**: Stored in localStorage, never re-fetched
 
-### Push Notifications Setup (PARTIAL)
+### Push Notifications Setup (CLIENT DONE)
 - Supabase project created: `keepers-report`
 - Database tables created: `devices`, `notification_prefs`
-- Frontend can register devices and save notification preferences
+- Firebase project created: `keepers-report`
+- FCM configured with VAPID key
+- Service worker registered for background notifications
+- Frontend gets FCM token and registers with Supabase
 - Bell icon on surf page to toggle notifications per location
-- **Still needed**: Backend worker to actually send notifications
+- **Still needed**: Backend Edge Function to actually send notifications
 
 ## Supabase Configuration
 - **Project URL**: `https://gybvghnldmgvkhtukpil.supabase.co`
@@ -57,19 +61,23 @@
 - **Tables**: `devices`, `notification_prefs`
 - RLS enabled on both tables
 
+## Firebase Configuration
+- **Project**: `keepers-report`
+- **App ID**: `1:878621210730:web:154390c9168dc3a9f8f213`
+- **VAPID Key**: `BEWkA-vZcTGqyTxa1aRymidJFwG-L5kJIkeEFvk9tzXaUrAZ6b5l2jSNYQfqdW89i2By4BM6U6uk78Oq6nXg6kA`
+- Config stored in `notifications.js`
+
 ## Next: Push Notifications Backend
 
 ### What's Done
 - User can tap bell icon → saves notification preference to Supabase
 - Preferences stored: location, notify_good_conditions, notify_tide_falling, notify_tide_rising
+- Firebase project + FCM configured
+- FCM tokens obtained from browser and stored in Supabase `devices` table
+- Service worker handles background push notifications
 
 ### What's Needed
-1. **Firebase Cloud Messaging (FCM) Setup**
-   - Create Firebase project
-   - Add FCM to service worker
-   - Get FCM tokens from devices
-
-2. **Supabase Edge Function** (condition checker)
+1. **Supabase Edge Function** (condition checker)
    - Runs every 30 min via cron
    - Fetches current conditions from Open-Meteo
    - Fetches tide data from NOAA
