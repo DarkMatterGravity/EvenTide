@@ -5,7 +5,7 @@
 
 // LocationIQ API Key (free tier: 5000 req/day)
 // Sign up at: https://locationiq.com/ and replace this key
-const LOCATIONIQ_API_KEY = 'pk.YOUR_API_KEY_HERE';
+const LOCATIONIQ_API_KEY = 'pk.98266edf545f5e19b300d0c28ee027ab';
 
 // NOAA Tide Stations (US only)
 // Format: { id, name, lat, lng }
