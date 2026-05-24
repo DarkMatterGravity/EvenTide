@@ -536,11 +536,14 @@ async function toggleNotifications() {
     showNotificationToast('Notifications disabled for ' + location.name.split(',')[0]);
   } else {
     // Subscribe
-    // First register device if not already
+    // Device should already be registered from requestNotificationPermission()
+    // But double-check and register if needed
     const deviceId = localStorage.getItem('supabaseDeviceId');
     if (!deviceId) {
-      // For web, we use a placeholder token (real push tokens come from FCM/APNs)
-      await registerDevice('web-' + getDeviceId(), 'web');
+      const token = getStoredFCMToken() || await getFCMToken();
+      if (token) {
+        await registerDevice(token, 'web');
+      }
     }
 
     await saveNotificationPrefs(location, {
