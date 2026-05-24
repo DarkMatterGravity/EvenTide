@@ -1,132 +1,143 @@
 # The Keepers Report - Project Memory
 
 ## Current State
-- Surf forecast app for Sandy Hook, NJ
-- Uses Open-Meteo Marine + Weather APIs, Sunrise-Sunset.org
-- Mobile-first development approach (desktop features lagging behind)
+- Surf & tide forecast app supporting any coastal location worldwide
+- Mobile-first PWA (Progressive Web App)
+- GitHub Pages serves from `docs/` folder on master branch
+- Live at: mattergravity.github.io/TheKeepersReport/
 
-### Recently Completed
-- **Wave height visualization**: Blue dotted line shows wave height relative to 6ft surfer silhouette
-  - Line position scales with actual wave height (0.9ft = knees, 4.3ft = neck, 6ft = head)
-  - Surfer tinted blue to match, 40% opacity
-- **Location switcher**: Dropdown to switch between spots
-  - Sandy Hook, NJ and Uluwatu, Bali currently configured
-  - Each location has coordinates, timezone, and optimal swell/wind directions
-  - Data refetches on location change
-- **Header reorganized**:
-  - Title shortened to "FORECAST"
-  - Sun times next to title
-  - Location dropdown below
-  - Rating badge (FLAT/FAIR/GOOD/EPIC) in top-right of Current Conditions box
-- Sunrise/sunset times from sunrise-sunset.org API
+### Tech Stack
+| Component | Service |
+|-----------|---------|
+| Hosting | GitHub Pages |
+| Wave/Weather | Open-Meteo Marine API |
+| Tide Data | NOAA CO-OPS API (US only) |
+| Geocoding | LocationIQ (replaced Nominatim) |
+| Coastline Detection | Overpass API (cached) |
+| Sun Times | suncalc library (client-side) |
+| Database | Supabase |
+| Push (planned) | Firebase Cloud Messaging |
 
-### Uncommitted
-- Updated Surfer.png in assets (can commit later if needed)
+### Key Files
+- `location.js` - Shared location module (search, favorites, NOAA stations)
+- `notifications.js` - Supabase integration for push notification preferences
+- `surf.js` - Surf forecast page logic
+- `app.js` - Tide page logic
+- `location.css` - Shared location picker styles
 
-## Planned Feature: Multi-Location Support
+## Recently Completed (This Session)
 
-### Overview
-Users can search any coastal location worldwide, automatically detect beach orientation, get accurate surf ratings, and save up to 5 favorite spots.
+### Multi-Location Support (DONE)
+- Location picker modal with map on all pages (menu, surf, tide)
+- Search any coastal location via LocationIQ
+- Auto-detect beach orientation from Overpass coastline data
+- Manual compass fallback when no coastline detected
+- Save up to 5 favorite locations in localStorage
+- NOAA station auto-assignment for US locations (~70 stations mapped)
+- Tide data shows "not available" message for international locations
+- Dynamic surf guide based on beach orientation (optimal swell/wind)
 
-### Components to Build
+### API Replacements for Commercial Use (DONE)
+- **Nominatim → LocationIQ**: Commercial-friendly geocoding
+  - API Key in location.js: `pk.98266edf545f5e19b300d0c28ee027ab`
+  - 5,000 requests/day free tier
+- **Sunrise-Sunset.org → suncalc**: Client-side calculation, no API needed
+- **Coastline caching**: Stored in localStorage, never re-fetched
 
-1. **Location Search**
-   - Nominatim (OpenStreetMap geocoding) for text → lat/lng
-   - Display results for user to select
-   - Validate selection is near coastline
+### Push Notifications Setup (PARTIAL)
+- Supabase project created: `keepers-report`
+- Database tables created: `devices`, `notification_prefs`
+- Frontend can register devices and save notification preferences
+- Bell icon on surf page to toggle notifications per location
+- **Still needed**: Backend worker to actually send notifications
 
-2. **Beach Orientation Detection**
-   - Query Overpass API for coastline geometry within 500m-1km
-   - Find closest coastline segment
-   - Calculate perpendicular angle (OSM convention: water on right side)
-   - Fallback: manual compass selector if no coastline data
+## Supabase Configuration
+- **Project URL**: `https://gybvghnldmgvkhtukpil.supabase.co`
+- **Publishable Key**: `sb_publishable_-psTImQd8K3JdPWPcpnXHQ_PxGGbW-1`
+- **Tables**: `devices`, `notification_prefs`
+- RLS enabled on both tables
 
-3. **Dynamic Optimal Conditions**
-   - Calculate from beach orientation:
-     - `swellDirs`: facing direction ± 22.5°
-     - `windDirs`: opposite direction ± 45° (offshore)
-   - Keep `minHeight`, `maxHeight`, `minPeriod` as defaults
+## Next: Push Notifications Backend
 
-4. **Favorites System (localStorage, max 5)**
-   ```javascript
-   {
-     id: "uuid",
-     name: "Pipeline, Oahu",
-     lat: 21.665,
-     lng: -158.053,
-     orientation: 315,  // cached
-     timezone: "Pacific/Honolulu"
-   }
-   ```
+### What's Done
+- User can tap bell icon → saves notification preference to Supabase
+- Preferences stored: location, notify_good_conditions, notify_tide_falling, notify_tide_rising
 
-5. **UI Changes**
-   - Header: tappable location name + search icon
-   - Location sheet/modal with search + favorites list
-   - Add/remove favorites (star icons)
-   - Manual orientation fallback (compass picker)
+### What's Needed
+1. **Firebase Cloud Messaging (FCM) Setup**
+   - Create Firebase project
+   - Add FCM to service worker
+   - Get FCM tokens from devices
 
-### User Flow
+2. **Supabase Edge Function** (condition checker)
+   - Runs every 30 min via cron
+   - Fetches current conditions from Open-Meteo
+   - Fetches tide data from NOAA
+   - Checks each user's notification_prefs
+   - Triggers push via FCM when conditions match
 
-**First Launch:**
-1. App shows location search modal
-2. User searches, selects location
-3. "Detecting beach orientation..." loading
-4. Forecast loads → "Save as favorite?" prompt
-5. Saved location becomes default
+3. **Notification Logic**
+   - Good conditions: When rating is GOOD or EPIC
+   - Tide falling: When tide crosses midpoint going down
+   - Tide rising: When tide crosses midpoint going up
 
-**Returning User:**
-1. App loads first favorite immediately
-2. Tap header → location sheet slides up
-3. Switch between favorites or search new
-
-**Location Sheet UI:**
+### Architecture
 ```
-┌─────────────────────────────────┐
-│  🔍 Search locations...         │
-├─────────────────────────────────┤
-│  ★ Pipeline, Oahu        ← current
-│  ★ Huntington Beach, CA         │
-│  ★ Sandy Hook, NJ               │
-│  ☆ Snapper Rocks, AUS           │
-│  [+ Add current location]       │
-└─────────────────────────────────┘
+┌─────────────────┐      ┌─────────────────┐
+│  Capacitor App  │◄────►│    Supabase     │
+│  (iOS/Android)  │      │   - devices     │
+└────────┬────────┘      │   - prefs       │
+         │               └────────┬────────┘
+         │ FCM token              │
+         ▼                        │
+┌─────────────────┐               │
+│  Firebase FCM   │◄──────────────┤
+└────────▲────────┘               │
+         │                        │
+         │ sends push             ▼
+         │            ┌───────────────────────┐
+         └────────────│  Edge Function (cron) │
+                      │  - Check conditions   │
+                      │  - Compare to prefs   │
+                      │  - Send FCM push      │
+                      └───────────────────────┘
 ```
 
-### API Licensing Notes
+## App Store Path
 
-**Current APIs:**
-| API | Free Tier | Commercial Use |
-|-----|-----------|----------------|
-| Open-Meteo | 10k req/day, non-commercial | Paid (~€15-50/mo) |
-| Sunrise-Sunset.org | No limit stated | No SLA |
-| Nominatim | 1 req/sec max | Not for commercial - need alternative |
-| Overpass | Shared resource | OK with attribution |
+### For Mobile Stores
+- **PWABuilder**: Quickest path to wrap PWA for stores
+- **Capacitor**: If need native features (push notifications)
+- Push notifications help with Apple App Store approval
 
-**For 200k users on free app:** Would exceed Open-Meteo free tier, need paid or self-host
+### Store Fees
+| Store | Fee |
+|-------|-----|
+| Google Play | $25 one-time |
+| Apple App Store | $99/year |
 
-**Cost-optimized approach (<$50/month for paid app):**
-1. Open-Meteo commercial (~€15-30/mo) with aggressive caching
-2. Replace sunrise-sunset.org with `suncalc` JS library (free, client-side math)
-3. LocationIQ for geocoding (5k/day free) + cache results forever
-4. Overpass for coastline + cache forever per location
-5. Cache forecasts per location for 1-2 hours (reduces API calls by 90-95%)
+### For Desktop
+- **Electron** or **Tauri** for Win/Mac/Linux distribution
 
-**With caching:** 200k users hitting 50 popular spots = ~600 actual API calls/day
+## Cost Projections
 
-### Implementation Order
-1. Coastline orientation detection (core new logic)
-2. Location search with Nominatim
-3. Favorites in localStorage
-4. UI components (sheet, search, favorites list)
-5. Caching layer
+### Hobby (Current)
+- All services on free tier
+- Store fees if publishing: ~$124/year
 
-### Edge Cases to Handle
-- No coastline found → manual compass picker
-- Inland location → "Not near coast" error
-- API errors → graceful fallback with retry
-- 5 favorites limit → must remove one to add new
+### Commercial (If Monetized)
+| Service | Cost |
+|---------|------|
+| Open-Meteo | ~€20/month |
+| Supabase | Free → $25/month at scale |
+| LocationIQ | Free → $49/month at scale |
+| FCM | Free |
+| Store fees | $124/year |
 
 ## Workflow Preferences
-- Commit and push after every change (user wants to see changes live on GitHub Pages immediately)
-- Mobile-first development - desktop features can lag behind
-- GitHub Pages serves from `docs/` folder on master branch
+- Commit and push after every change (live on GitHub Pages immediately)
+- Mobile-first development
+- Dev preview available at `/dev/` path on GitHub Pages
+
+## Archive Points
+- `v1.0-pre-location-search` tag: Before multi-location feature
