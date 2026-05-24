@@ -102,26 +102,20 @@ async function loadSunTimes() {
   if (!location) return;
 
   try {
-    const url = `https://api.sunrise-sunset.org/json?lat=${location.lat}&lng=${location.lng}&formatted=0`;
-    const response = await fetch(url);
-    const data = await response.json();
+    // Use suncalc library (client-side calculation, no API needed)
+    const times = SunCalc.getTimes(new Date(), location.lat, location.lng);
 
-    if (data.status === 'OK') {
-      const sunrise = new Date(data.results.sunrise);
-      const sunset = new Date(data.results.sunset);
+    document.getElementById('sunriseTime').textContent = times.sunrise.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
 
-      document.getElementById('sunriseTime').textContent = sunrise.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      });
-
-      document.getElementById('sunsetTime').textContent = sunset.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      });
-    }
+    document.getElementById('sunsetTime').textContent = times.sunset.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
   } catch (error) {
     console.error('Failed to load sun times:', error);
   }

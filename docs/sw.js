@@ -49,7 +49,7 @@ self.addEventListener('fetch', event => {
 
   // API calls - network only (don't cache dynamic data)
   if (url.hostname.includes('noaa.gov') ||
-      url.hostname.includes('sunrise-sunset.org') ||
+      url.hostname.includes('locationiq.com') ||
       url.hostname.includes('ndbc.noaa.gov') ||
       url.hostname.includes('open-meteo.com') ||
       url.hostname.includes('corsproxy.io')) {

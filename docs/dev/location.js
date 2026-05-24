@@ -3,6 +3,10 @@
 // Used by menu, surf, and tide pages
 // ============================================
 
+// LocationIQ API Key (free tier: 5000 req/day)
+// Sign up at: https://locationiq.com/ and replace this key
+const LOCATIONIQ_API_KEY = 'pk.YOUR_API_KEY_HERE';
+
 // NOAA Tide Stations (US only)
 // Format: { id, name, lat, lng }
 const NOAA_STATIONS = [
@@ -219,7 +223,41 @@ function isUSLocation(lat, lng) {
 // COASTLINE ORIENTATION DETECTION
 // ============================================
 
+// Cache key for coastline data (rounds to ~100m grid)
+function getCoastlineCacheKey(lat, lng) {
+  return `coastline_${lat.toFixed(3)}_${lng.toFixed(3)}`;
+}
+
+function getCachedCoastline(lat, lng) {
+  try {
+    const key = getCoastlineCacheKey(lat, lng);
+    const cached = localStorage.getItem(key);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch (e) {
+    console.warn('Failed to read coastline cache:', e);
+  }
+  return null;
+}
+
+function cacheCoastline(lat, lng, data) {
+  try {
+    const key = getCoastlineCacheKey(lat, lng);
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (e) {
+    console.warn('Failed to cache coastline:', e);
+  }
+}
+
 async function detectBeachOrientation(lat, lng) {
+  // Check cache first
+  const cached = getCachedCoastline(lat, lng);
+  if (cached) {
+    console.log('Using cached coastline data');
+    return cached;
+  }
+
   const SEARCH_RADIUS = 1000;
 
   const query = `
@@ -292,11 +330,16 @@ async function detectBeachOrientation(lat, lng) {
     else if (minDistance < 500) confidence = 'medium';
     else confidence = 'low';
 
-    return {
+    const result = {
       orientation: Math.round(orientation),
       confidence,
       distanceToCoast: Math.round(minDistance)
     };
+
+    // Cache the result for future use
+    cacheCoastline(lat, lng, result);
+
+    return result;
 
   } catch (error) {
     console.error('Beach orientation detection failed:', error);
@@ -411,7 +454,7 @@ async function getTimezone(lat, lng) {
 async function reverseGeocode(lat, lng) {
   let locationName = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
   try {
-    const geoResponse = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+    const geoResponse = await fetch(`https://us1.locationiq.com/v1/reverse?key=${LOCATIONIQ_API_KEY}&lat=${lat}&lon=${lng}&format=json`);
     if (geoResponse.ok) {
       const geoData = await geoResponse.json();
       const parts = [];
@@ -646,7 +689,7 @@ async function searchLocation() {
 
   try {
     const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5`
+      `https://us1.locationiq.com/v1/search?key=${LOCATIONIQ_API_KEY}&q=${encodeURIComponent(query)}&format=json&limit=5`
     );
 
     if (!response.ok) throw new Error('Search failed');

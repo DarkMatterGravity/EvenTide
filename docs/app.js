@@ -185,16 +185,11 @@ async function fetchTemperatures() {
 async function fetchSunTimes() {
   return fetchWithCache('sunTimes', async () => {
     const coords = getCoordinates();
-    const url = `https://api.sunrise-sunset.org/json?lat=${coords.lat}&lng=${coords.lng}&formatted=0`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Failed to fetch sun times');
-    const data = await response.json();
-    if (data.status !== 'OK') throw new Error('Invalid sun times');
-    const sunrise = new Date(data.results.sunrise);
-    const sunset = new Date(data.results.sunset);
+    // Use suncalc library (client-side calculation, no API needed)
+    const times = SunCalc.getTimes(new Date(), coords.lat, coords.lng);
     return {
-      sunrise: sunrise.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
-      sunset: sunset.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+      sunrise: times.sunrise.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }),
+      sunset: times.sunset.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
     };
   });
 }
