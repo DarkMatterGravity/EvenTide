@@ -768,6 +768,14 @@ function selectFavorite(index) {
 
   const location = favorites[index];
   ensureNoaaStation(location);
+
+  // Move selected location to front so it persists across pages
+  if (index > 0) {
+    favorites.splice(index, 1);
+    favorites.unshift(location);
+    saveFavorites(favorites);
+  }
+
   setCurrentLocation(location);
   closeLocationPicker();
 }
